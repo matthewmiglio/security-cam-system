@@ -25,16 +25,16 @@ stateless IP cameras.
 ## Hardware
 
 ### Per camera node (v1 — cheapest useful)
-| Part | Choice | Notes | Price (USD) |
-|---|---|---|---|
-| Compute | Raspberry Pi Zero 2 W | Built-in 2.4 GHz Wi-Fi, CSI-2, H.264 encode @ 1080p30 | ~$15 |
-| Camera | Raspberry Pi Camera Module 2 (official, IMX219 8MP, fixed focus) | First-class libcamera support, no clone lottery. Upgrade to Module 3 NoIR (~$25) only on nodes that need night vision. | ~$15 |
-| Storage | 32 GB microSD (A2, Samsung Evo / SanDisk High Endurance) | OS + app only, no footage | ~$8 |
-| Power | 5V 2.5A USB supply (official Pi PSU ideal) | Cheap bricks cause instability | ~$10 |
-| CSI cable | Zero-compatible ribbon (22-pin to 15-pin) | Zero uses the mini CSI connector | ~$3 |
-| Enclosure | 3D printed, 2-piece, PETG/ASA | ~40–60 g filament per unit | ~$2 (filament) |
-| Optional | IR LED ring + light sensor | Only for NoIR night-vision units | ~$5 |
-| **Per-node total** | | | **~$53 (day) / ~$68 (night w/ Module 3 NoIR + IR ring)** |
+| Part | Choice | Notes | Price (USD) | Buy |
+|---|---|---|---|---|
+| Compute | Raspberry Pi Zero 2 W | Built-in 2.4 GHz Wi-Fi, CSI-2, H.264 encode @ 1080p30 | $16.35 | [Canakit](https://www.canakit.com/raspberry-pi-zero-2-w.html?defpid=4783) |
+| Camera | Arducam IMX219 8MP (Pi Camera V2 equivalent) | Ships with 22-22pin Zero 2W ribbon in the box. Upgrade to Camera Module 3 NoIR only on nodes that need night vision. | $12.99 | [Amazon](https://www.amazon.com/gp/product/B09V576TFN/ref=ox_sc_act_title_1?smid=A2IAB2RW3LLT8D&psc=1) |
+| Storage | 32 GB SanDisk Ultra microSDHC (A1, 2-pack) | OS + app only, no footage | ~$16 (= $32 / 2) | [Amazon](https://www.amazon.com/gp/product/B08J4HJ98L/ref=ox_sc_act_title_2?smid=ATVPDKIKX0DER&th=1) |
+| Power | Canakit 5V 2.5A Micro USB supply | Cheap bricks cause instability | $9.95 | [Canakit](https://www.canakit.com/raspberry-pi-adapter-power-supply-2-5a.html) |
+| CSI cable | Zero 22-22pin ribbon | **Included with the Arducam camera above** — don't buy separately | $0 | — |
+| Enclosure | 3D printed, 2-piece, PETG/ASA | ~40–60 g filament per unit | ~$2 (filament) | self-print |
+| Optional | IR LED ring + light sensor | Only for NoIR night-vision units | ~$5 | — |
+| **Per-node total** | | | **~$57 (day)** | |
 
 ### Mothership (you already have this)
 | Part | Choice | Price (USD) |

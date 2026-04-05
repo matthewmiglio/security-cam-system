@@ -18,11 +18,12 @@ Edge nodes: capture + stream. Mothership: record, retain, view, manage.
 
 ## Hardware
 
-**Per camera node (~$53):**
-- Raspberry Pi Zero 2 W
-- Pi Camera Module 2 (IMX219)
-- 32 GB microSD + 5V PSU + CSI ribbon
-- 3D-printed enclosure
+**Per camera node (~$57):**
+- [Raspberry Pi Zero 2 W](https://www.canakit.com/raspberry-pi-zero-2-w.html?defpid=4783) — $16.35 (Canakit)
+- [Arducam IMX219 8MP camera](https://www.amazon.com/gp/product/B09V576TFN/ref=ox_sc_act_title_1?smid=A2IAB2RW3LLT8D&psc=1) — $12.99 (Amazon, ribbon cable included)
+- [32 GB SanDisk Ultra microSD (2-pack)](https://www.amazon.com/gp/product/B08J4HJ98L/ref=ox_sc_act_title_2?smid=ATVPDKIKX0DER&th=1) — ~$16/card (Amazon)
+- [Canakit 5V 2.5A Micro USB PSU](https://www.canakit.com/raspberry-pi-adapter-power-supply-2-5a.html) — $9.95 (Canakit)
+- 3D-printed enclosure — ~$2 filament
 
 **Mothership:**
 - Any old PC (reuse what you have)
