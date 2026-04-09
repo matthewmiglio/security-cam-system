@@ -53,6 +53,24 @@ systemd (auto-restart)
 - **RTSP/H.264** — efficient enough for many cameras on one Wi-Fi AP
 - **Central complexity** — easier to manage, back up, and upgrade
 
+## Quick Start — Phase 0: Flash the SD Card
+
+1. Download and install [Raspberry Pi Imager](https://www.raspberrypi.com/software/)
+2. Run Imager and select:
+   - **Device** → Raspberry Pi Zero 2 W
+   - **OS** → Raspberry Pi OS (other) → **Raspberry Pi OS Lite (64-bit)**
+   - **Storage** → your microSD card
+3. Click the **gear/settings icon** before writing and configure:
+   - Hostname: `cam01`
+   - Enable SSH (use password or public key)
+   - Wi-Fi SSID + password
+   - Username + password
+4. Hit **Write** and wait for it to finish
+5. Put the SD card in the Pi, plug in HDMI **before** power, then power on
+6. You should see boot text on the monitor within a few seconds
+
+Full build plan: [docs/plan.md](docs/plan.md)
+
 ## Status
 
 Planning phase. See [docs/plan.md](docs/plan.md) for the step-by-step build.
