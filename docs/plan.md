@@ -1,4 +1,6 @@
-# DIY Wi-Fi Security Camera System — Build Plan
+# DIY Wi-Fi Security Camera System — Stack Details & Appendix
+
+> Step-by-step setup instructions are in the [README](../README.md).
 
 ## Architecture (one-line summary)
 
@@ -71,82 +73,6 @@ stateless IP cameras.
 - **NVR:** [Frigate](https://frigate.video/) in Docker — handles recording, retention, live view, motion/object detection, clip export
 - **Reverse proxy (optional):** Caddy or nginx for HTTPS on your LAN
 - **Monitoring (optional):** Uptime Kuma pinging each node's `/health`
-
----
-
-## Step-by-step build plan
-
-### Phase 0 — Bench prep
-1. Flash Raspberry Pi OS Lite 64-bit to the microSD using Raspberry Pi Imager.
-   - In Imager: preset hostname (`cam01`), SSH on, Wi-Fi credentials, username, SSH key.
-2. Boot the Pi Zero 2 W headless, SSH in, `sudo apt update && sudo apt full-upgrade -y`.
-3. Confirm camera works: `rpicam-hello --timeout 2000` (should report the IMX708 detected).
-
-### Phase 1 — Single streaming camera node
-1. Install MediaMTX:
-   ```bash
-   wget https://github.com/bluenviron/mediamtx/releases/latest/download/mediamtx_linux_arm64v8.tar.gz
-   sudo tar -xzf mediamtx_linux_arm64v8.tar.gz -C /usr/local/bin mediamtx
-   sudo mv mediamtx_linux_arm64v8/mediamtx.yml /etc/mediamtx.yml
-   ```
-2. Configure MediaMTX to publish a path named `cam` that runs `rpicam-vid` and pipes H.264 to it. Example path config:
-   ```yaml
-   paths:
-     cam:
-       runOnInit: >
-         bash -c 'rpicam-vid -t 0 --inline --nopreview
-         --width 1920 --height 1080 --framerate 15
-         --codec h264 --bitrate 2500000 -o - |
-         ffmpeg -f h264 -i - -c copy -f rtsp rtsp://localhost:8554/cam'
-       runOnInitRestart: yes
-   ```
-3. Create a systemd unit `/etc/systemd/system/mediamtx.service` → enable + start.
-4. Verify from the mothership: `ffplay rtsp://cam01.local:8554/cam` (or VLC).
-
-### Phase 2 — Control API on each node
-1. Install: `sudo apt install -y python3-pip python3-venv`
-2. Create `/opt/camctl/` with venv, install `fastapi uvicorn`.
-3. Implement endpoints (see `src/camctl/` in this repo when built):
-   - `GET /health` — uptime, temp, free disk
-   - `GET /snapshot` — grab a JPEG via `rpicam-still`
-   - `POST /stream/restart` — `systemctl restart mediamtx`
-   - `POST /reboot`
-   - `POST /settings` — bitrate / resolution / fps (writes config, restarts stream)
-4. Run under systemd on port 8000, bind to LAN only.
-5. Lock down with a shared-secret header or Tailscale/WireGuard if exposed beyond LAN.
-
-### Phase 3 — Mothership / Frigate
-1. Install Docker + docker compose on the old PC.
-2. Mount the big HDD at `/mnt/nvr`.
-3. `docker-compose.yml` for Frigate with:
-   - `media` volume → `/mnt/nvr`
-   - camera definitions pointing at `rtsp://camNN.local:8554/cam`
-   - retention: e.g. 7 days continuous, 30 days motion events
-   - detector: CPU detector to start; add Coral USB TPU later if you want object detection
-4. Access the Frigate UI at `http://mothership.local:5000`.
-5. Confirm recording writes to the HDD and retention prunes correctly.
-
-### Phase 4 — Enclosure & deployment
-1. Design 3D-printed 2-piece case:
-   - Lens cutout aligned to camera module
-   - Cable strain relief
-   - Vent slots (no fan)
-   - Mounting tab / standard tripod thread
-2. Print in PETG or ASA (weather resistance if outdoor; add silicone gasket).
-3. Build 1–2 units, deploy, watch them for a week for thermal / Wi-Fi / SD issues.
-
-### Phase 5 — Fleet hygiene
-1. Bake a "golden" SD image after node is configured → `dd` clone for new nodes.
-2. Set predictable hostnames `cam01`..`camNN` + mDNS.
-3. Static DHCP reservations on the router.
-4. Add Uptime Kuma or simple cron script on mothership pinging each `/health`.
-5. Document the flash-and-deploy process in this repo's README.
-
-### Phase 6 — Production migration (only when v1 is stable)
-1. Swap Zero 2 W → CM5 + custom carrier.
-2. Swap Camera Module 3 → Camera Module 3 Sensor Assembly.
-3. Carrier adds PoE, eMMC, IR driver.
-4. Keep the software image nearly identical — that's the whole point.
 
 ---
 
