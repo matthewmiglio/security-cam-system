@@ -55,7 +55,39 @@ systemd (auto-restart)
 
 ## Setup
 
-### Phase 0 — Bench Prep
+### Phase 0 — Hardware Assembly
+
+Connect the CSI ribbon cable between the Pi Zero 2 W and the Arducam IMX219.
+
+**Parts:**
+
+| Pi Zero 2 W | Arducam IMX219 (back) | CSI ribbon cable |
+|---|---|---|
+| ![Pi Zero 2 W front](docs/images/pi-zero-2w-front.webp) | ![Arducam back](docs/images/arducam-imx219-back.webp) | ![CSI cable contacts](docs/images/csi-cable-front.webp) |
+
+**Cable orientation:**
+- The cable has two sides: a **contacts side** (exposed metal strips) and a **plain side** (white/blue stiffener tab).
+- Both the Pi and the Arducam have a small plastic CSI connector with a flip-up latch.
+
+| | ![CSI cable contacts side](docs/images/csi-cable-front.webp) | ![CSI cable plain side](docs/images/csi-cable-back.webp) |
+|---|---|---|
+| | Contacts side (metal strips) | Plain side (blue stiffener tab) |
+
+**Steps:**
+1. Gently flip up the plastic latch on the Pi's CSI connector (near the HDMI port).
+2. Slide the ribbon cable in with **contacts facing the board** (toward the PCB).
+3. Press the latch back down to lock.
+4. Repeat on the Arducam — flip latch, insert cable with **contacts facing the board**, close latch.
+5. Insert the microSD card into the Pi's card slot.
+
+**Result:**
+
+| Assembled nodes |
+|---|
+| ![Two assembled Pi + Arducam units](docs/images/two-pi-zero-2w-with-cables.jpeg) |
+| ![Two Arducams with cables attached](docs/images/two-arducams-with-cables.jpeg) |
+
+### Phase 1 — Flash the SD Card
 
 #### First time (needs internet)
 
@@ -86,7 +118,7 @@ systemd (auto-restart)
 2. Hit **Write**. No network needed.
 3. Boot the Pi and change the hostname (`sudo hostnamectl set-hostname cam02`, etc.).
 
-### Phase 1 — Single Streaming Camera Node
+### Phase 2 — Single Streaming Camera Node
 
 1. Install MediaMTX:
    ```bash
@@ -108,7 +140,7 @@ systemd (auto-restart)
 3. Create a systemd unit `/etc/systemd/system/mediamtx.service` → enable + start.
 4. Verify from the mothership: `ffplay rtsp://cam01.local:8554/cam` (or VLC).
 
-### Phase 2 — Control API on Each Node
+### Phase 3 — Control API on Each Node
 
 1. Install: `sudo apt install -y python3-pip python3-venv`
 2. Create `/opt/camctl/` with venv, install `fastapi uvicorn`.
@@ -121,7 +153,7 @@ systemd (auto-restart)
 4. Run under systemd on port 8000, bind to LAN only.
 5. Lock down with a shared-secret header or Tailscale/WireGuard if exposed beyond LAN.
 
-### Phase 3 — Mothership / Frigate
+### Phase 4 — Mothership / Frigate
 
 1. Install Docker + docker compose on the old PC.
 2. Mount the big HDD at `/mnt/nvr`.
@@ -133,7 +165,7 @@ systemd (auto-restart)
 4. Access the Frigate UI at `http://mothership.local:5000`.
 5. Confirm recording writes to the HDD and retention prunes correctly.
 
-### Phase 4 — Enclosure & Deployment
+### Phase 5 — Enclosure & Deployment
 
 1. Design 3D-printed 2-piece case:
    - Lens cutout aligned to camera module
@@ -143,7 +175,7 @@ systemd (auto-restart)
 2. Print in PETG or ASA (weather resistance if outdoor; add silicone gasket).
 3. Build 1–2 units, deploy, watch for a week for thermal / Wi-Fi / SD issues.
 
-### Phase 5 — Fleet Hygiene
+### Phase 6 — Fleet Hygiene
 
 1. Bake a "golden" SD image after node is configured → `dd` clone for new nodes.
 2. Set predictable hostnames `cam01`..`camNN` + mDNS.
@@ -151,7 +183,7 @@ systemd (auto-restart)
 4. Add Uptime Kuma or simple cron script on mothership pinging each `/health`.
 5. Document the flash-and-deploy process in this repo's README.
 
-### Phase 6 — Production Migration (only when v1 is stable)
+### Phase 7 — Production Migration (only when v1 is stable)
 
 1. Swap Zero 2 W → CM5 + custom carrier.
 2. Swap Camera Module 3 → Camera Module 3 Sensor Assembly.
