@@ -77,7 +77,7 @@ Connect the CSI ribbon cable between the Pi Zero 2 W and the Arducam IMX219.
 1. Gently flip up the plastic latch on the Pi's CSI connector (near the HDMI port).
 2. Slide the ribbon cable in with **contacts facing the board** (toward the PCB).
 3. Press the latch back down to lock.
-4. Repeat on the Arducam — flip latch, insert cable with **contacts facing the board**, close latch.
+4. Repeat on the Arducam — flip latch, insert cable with **contacts facing AWAY from the board** (opposite of the Pi side), close latch.
 5. Insert the microSD card into the Pi's card slot.
 
 **Result:**
@@ -112,6 +112,11 @@ Connect the CSI ribbon cable between the Pi Zero 2 W and the Arducam IMX219.
 7. SSH in: `ssh cam01.local`, then `sudo apt update && sudo apt full-upgrade -y`.
 8. Confirm camera works: `rpicam-hello --timeout 2000` (should detect the IMX219).
 
+> **Trixie (Debian 13) note:** If `rpicam-hello` reports "No cameras available" even with
+> `camera_auto_detect=1` in `/boot/firmware/config.txt`, you also need `dtoverlay=imx219`.
+> The setup script (Phase 2) adds this automatically, but if you're debugging before
+> running the script, add it manually and reboot.
+
 #### Additional nodes (offline)
 
 1. In Raspberry Pi Imager: **Device** → Raspberry Pi Zero 2 W, **OS** → **Use custom** → select your `golden-cam.img` file, **Storage** → your SD card.
@@ -120,25 +125,39 @@ Connect the CSI ribbon cable between the Pi Zero 2 W and the Arducam IMX219.
 
 ### Phase 2 — Single Streaming Camera Node
 
-1. Install MediaMTX:
-   ```bash
-   wget https://github.com/bluenviron/mediamtx/releases/latest/download/mediamtx_linux_arm64v8.tar.gz
-   sudo tar -xzf mediamtx_linux_arm64v8.tar.gz -C /usr/local/bin mediamtx
-   sudo mv mediamtx_linux_arm64v8/mediamtx.yml /etc/mediamtx.yml
-   ```
-2. Configure MediaMTX to publish a path named `cam` that runs `rpicam-vid` and pipes H.264:
-   ```yaml
-   paths:
-     cam:
-       runOnInit: >
-         bash -c 'rpicam-vid -t 0 --inline --nopreview
-         --width 1920 --height 1080 --framerate 15
-         --codec h264 --bitrate 2500000 -o - |
-         ffmpeg -f h264 -i - -c copy -f rtsp rtsp://localhost:8554/cam'
-       runOnInitRestart: yes
-   ```
-3. Create a systemd unit `/etc/systemd/system/mediamtx.service` → enable + start.
-4. Verify from the mothership: `ffplay rtsp://cam01.local:8554/cam` (or VLC).
+Run the setup script on the Pi (installs MediaMTX, configures RTSP streaming, creates a systemd service):
+
+```bash
+# Option A — from the Pi itself:
+sudo bash scripts/setup-cam.sh
+
+# Option B — from your workstation over SSH:
+ssh cam01.local 'sudo bash -s' < scripts/setup-cam.sh
+```
+
+The script handles:
+- System update
+- Camera detection + `/boot/firmware/config.txt` fixes (`camera_auto_detect=1`, `dtoverlay=imx219`)
+- Installing ffmpeg + python3
+- Downloading and installing [MediaMTX](https://github.com/bluenviron/mediamtx) v1.17.1
+- Configuring MediaMTX to use the native `rpiCamera` source (hardware H.264, no ffmpeg pipe)
+- Creating and enabling a `mediamtx.service` systemd unit
+
+Defaults (override with env vars):
+| Setting | Default | Env var |
+|---|---|---|
+| Resolution | 1920×1080 | `STREAM_WIDTH`, `STREAM_HEIGHT` |
+| Frame rate | 15 fps | `STREAM_FPS` |
+| Bitrate | 2.5 Mbps | `STREAM_BITRATE` |
+| RTSP port | 8554 | `RTSP_PORT` |
+| Stream path | `cam` | `STREAM_PATH` |
+
+Verify from the mothership:
+```bash
+ffplay rtsp://cam01.local:8554/cam
+# or
+vlc rtsp://cam01.local:8554/cam
+```
 
 ### Phase 3 — Control API on Each Node
 
@@ -192,4 +211,4 @@ Connect the CSI ribbon cable between the Pi Zero 2 W and the Arducam IMX219.
 
 ## Status
 
-Planning phase. See [docs/plan.md](docs/plan.md) for stack details and appendix.
+Phase 2 complete — single camera node streaming RTSP. See [docs/plan.md](docs/plan.md) for stack details and appendix.

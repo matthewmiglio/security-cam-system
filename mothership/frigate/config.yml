@@ -1,0 +1,80 @@
+# Frigate NVR configuration
+# Docs: https://docs.frigate.video/configuration/
+
+# ---------- MQTT (disabled — not needed yet) ----------
+mqtt:
+  enabled: false
+
+# ---------- Detector ----------
+# CPU detector for now. Swap to a Coral USB TPU later for real object detection.
+detectors:
+  cpu:
+    type: cpu
+    num_threads: 4
+
+# ---------- Global recording settings ----------
+record:
+  enabled: true
+  retain:
+    days: 7                   # keep all recordings for 7 days
+    mode: motion              # only retain segments with motion (saves disk)
+  events:
+    retain:
+      default: 30             # keep event clips for 30 days
+
+# ---------- Global snapshot settings ----------
+snapshots:
+  enabled: true
+  retain:
+    default: 30               # keep snapshots for 30 days
+
+# ---------- Cameras ----------
+cameras:
+
+  cam01:
+    ffmpeg:
+      inputs:
+        # Single RTSP stream, used for both detect and record roles.
+        # MediaMTX on the Pi serves H.264 at 1080p/15fps.
+        - path: rtsp://10.0.0.137:8554/cam
+          roles:
+            - detect
+            - record
+
+    detect:
+      width: 1280             # scale down for detection efficiency
+      height: 720
+      fps: 15
+
+    record:
+      enabled: true
+
+    snapshots:
+      enabled: true
+
+    motion:
+      threshold: 30           # default — tune later if needed
+      contour_area: 10        # minimum motion area (% of frame)
+
+  cam02:
+    ffmpeg:
+      inputs:
+        - path: rtsp://10.0.0.157:8554/cam
+          roles:
+            - detect
+            - record
+
+    detect:
+      width: 1280
+      height: 720
+      fps: 15
+
+    record:
+      enabled: true
+
+    snapshots:
+      enabled: true
+
+    motion:
+      threshold: 30
+      contour_area: 10

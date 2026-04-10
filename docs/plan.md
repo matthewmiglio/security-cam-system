@@ -63,7 +63,7 @@ stateless IP cameras.
 ## Software stack
 
 ### Edge node (per camera)
-- **OS:** Raspberry Pi OS Lite (64-bit, Bookworm)
+- **OS:** Raspberry Pi OS Lite (64-bit, Trixie / Debian 13)
 - **Capture:** `libcamera` / `rpicam-apps` (system stack)
 - **RTSP server:** [MediaMTX](https://github.com/bluenviron/mediamtx) — small Go binary, publishes the libcamera stream as RTSP
 - **Control API:** FastAPI + uvicorn (small Python service)

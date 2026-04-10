@@ -1,0 +1,23 @@
+# Frigate NVR — runs on the mothership PC (old desktop, Linux + Docker).
+# Start with: docker compose up -d
+# Web UI: http://mothership.local:5000
+
+services:
+  frigate:
+    image: ghcr.io/blakeblackshear/frigate:stable
+    container_name: frigate
+    restart: unless-stopped
+    privileged: true          # needed for hardware acceleration
+    shm_size: 256mb           # shared memory for 2x 1080p cameras
+
+    ports:
+      - "5000:5000"           # web UI
+      - "8971:8971"           # API
+
+    volumes:
+      - ./frigate/config.yml:/config/config.yml:ro
+      - /mnt/nvr:/media/frigate    # recordings + snapshots on the big HDD
+      - /etc/localtime:/etc/localtime:ro
+
+    environment:
+      - FRIGATE_RTSP_PASSWORD=unused   # we don't use auth on local RTSP streams
