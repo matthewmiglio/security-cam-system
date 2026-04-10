@@ -6,6 +6,8 @@ detection, and UI lives on the mothership — camera nodes are replaceable.
 
 Stack details & appendix: [docs/plan.md](docs/plan.md)
 
+![Frigate NVR dashboard](docs/images/ui-preview.png)
+
 ## Architecture
 
 ```
