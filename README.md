@@ -6,7 +6,11 @@ detection, and UI lives on the mothership — camera nodes are replaceable.
 
 Stack details & appendix: [docs/plan.md](docs/plan.md)
 
-![Frigate NVR dashboard](docs/images/ui-preview.png)
+![Frigate NVR dashboard](docs/images/ui-preview.webp)
+
+| ![Cam 1 snapshot](docs/images/cam-1-snapshot-example.webp) | ![Cam 2 snapshot](docs/images/cam-2-snapshot-example.webp) |
+|---|---|
+| Cam 1 snapshot | Cam 2 snapshot |
 
 ## Architecture
 
@@ -86,8 +90,8 @@ Connect the CSI ribbon cable between the Pi Zero 2 W and the Arducam IMX219.
 
 | Assembled nodes |
 |---|
-| ![Two assembled Pi + Arducam units](docs/images/two-pi-zero-2w-with-cables.jpeg) |
-| ![Two Arducams with cables attached](docs/images/two-arducams-with-cables.jpeg) |
+| ![Two assembled Pi + Arducam units](docs/images/two-pi-zero-2w-with-cables.webp) |
+| ![Two Arducams with cables attached](docs/images/two-arducams-with-cables.webp) |
 
 ### Phase 1 — Flash the SD Card
 
