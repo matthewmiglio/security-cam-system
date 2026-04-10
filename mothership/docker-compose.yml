@@ -1,6 +1,10 @@
-# Frigate NVR — runs on the mothership PC (old desktop, Linux + Docker).
+# Frigate NVR — runs on the mothership PC.
 # Start with: docker compose up -d
-# Web UI: http://mothership.local:5000
+# Web UI: http://localhost:5000
+#
+# Windows notes:
+#   - /etc/localtime replaced with TZ env var
+#   - /mnt/nvr replaced with a local ./storage dir (adjust to a larger drive if needed)
 
 services:
   frigate:
@@ -16,8 +20,8 @@ services:
 
     volumes:
       - ./frigate/config.yml:/config/config.yml:ro
-      - /mnt/nvr:/media/frigate    # recordings + snapshots on the big HDD
-      - /etc/localtime:/etc/localtime:ro
+      - ./storage:/media/frigate    # recordings + snapshots (move to a bigger drive later)
 
     environment:
       - FRIGATE_RTSP_PASSWORD=unused   # we don't use auth on local RTSP streams
+      - TZ=America/New_York           # adjust to your timezone

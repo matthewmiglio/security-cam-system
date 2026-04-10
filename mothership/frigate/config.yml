@@ -15,12 +15,14 @@ detectors:
 # ---------- Global recording settings ----------
 record:
   enabled: true
-  retain:
-    days: 7                   # keep all recordings for 7 days
-    mode: motion              # only retain segments with motion (saves disk)
-  events:
+  continuous:
+    days: 7                   # keep continuous recordings for 7 days
+  motion:
+    days: 14                  # keep motion segments for 14 days
+  detections:
     retain:
-      default: 30             # keep event clips for 30 days
+      days: 30                # keep detection clips for 30 days
+      mode: motion
 
 # ---------- Global snapshot settings ----------
 snapshots:

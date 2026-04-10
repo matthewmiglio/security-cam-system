@@ -1,1 +1,4 @@
 .claude/
+
+# Frigate runtime data (recordings, snapshots, DB)
+mothership/storage/
