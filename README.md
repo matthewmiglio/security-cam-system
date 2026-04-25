@@ -180,15 +180,23 @@ vlc rtsp://cam01.local:8554/cam
 
 ### Phase 4 — Mothership / Frigate
 
-1. Install Docker + docker compose on the old PC.
-2. Mount the big HDD at `/mnt/nvr`.
-3. `docker-compose.yml` for Frigate with:
-   - `media` volume → `/mnt/nvr`
-   - camera definitions pointing at `rtsp://camNN.local:8554/cam`
-   - retention: e.g. 7 days continuous, 30 days motion events
-   - detector: CPU detector to start; add Coral USB TPU later for object detection
-4. Access the Frigate UI at `http://mothership.local:5000`.
-5. Confirm recording writes to the HDD and retention prunes correctly.
+1. Install Docker Desktop (Windows) or Docker + docker compose (Linux) on the mothership PC.
+2. Configure cameras in [`mothership/frigate/config.yml`](mothership/frigate/config.yml) — point each `path` at `rtsp://camNN.local:8554/cam` and tune retention.
+3. Adjust the `TZ` env var in [`mothership/docker-compose.yml`](mothership/docker-compose.yml) if you're not on `America/New_York`.
+4. Boot the mothership view:
+   ```bash
+   cd mothership
+   docker compose up -d
+   ```
+   Recordings, clips, exports, and snapshots land under `mothership/storage/` (move that to a larger drive when you outgrow it).
+5. Open the Frigate UI at **http://localhost:5000** (or `http://mothership.local:5000` from another LAN machine). The API is on port `8971`.
+6. Useful commands:
+   ```bash
+   docker compose logs -f frigate   # tail logs
+   docker compose restart frigate   # reload after config edits
+   docker compose down              # stop the stack
+   ```
+7. Confirm recording writes to `mothership/storage/recordings/` and retention prunes correctly.
 
 ### Phase 5 — Enclosure & Deployment
 
