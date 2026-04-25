@@ -4,8 +4,6 @@ DIY Wi-Fi security camera system. Cheap, stateless Pi-based camera nodes stream
 RTSP/H.264 to a single old PC running Frigate as the NVR. All storage, motion
 detection, and UI lives on the mothership — camera nodes are replaceable.
 
-Stack details & appendix: [docs/plan.md](docs/plan.md)
-
 ![Frigate NVR dashboard](docs/images/ui-preview.webp)
 
 | ![Cam 1 snapshot](docs/images/cam-1-snapshot-example.webp) | ![Cam 2 snapshot](docs/images/cam-2-snapshot-example.webp) |
@@ -22,42 +20,74 @@ Stack details & appendix: [docs/plan.md](docs/plan.md)
 
 Edge nodes: capture + stream. Mothership: record, retain, view, manage.
 
+### Design principles
+
+- One sensor, one compute platform across all nodes (easy to mass-produce later).
+- No hard drives at the edge. Storage lives centrally.
+- Edge nodes are stateless — replace one by flashing an SD card.
+- Push complexity into software on the mothership, not into each node.
+- RTSP/H.264, not MJPEG. Wi-Fi bandwidth matters once you have 3+ cameras.
+
 ## Hardware
 
-**Per camera node (~$57):**
-- [Raspberry Pi Zero 2 W](https://www.canakit.com/raspberry-pi-zero-2-w.html?defpid=4783) — $16.35 (Canakit)
-- [Arducam IMX219 8MP camera](https://www.amazon.com/gp/product/B09V576TFN/ref=ox_sc_act_title_1?smid=A2IAB2RW3LLT8D&psc=1) — $12.99 (Amazon, ribbon cable included)
-- [32 GB SanDisk Ultra microSD (2-pack)](https://www.amazon.com/gp/product/B08J4HJ98L/ref=ox_sc_act_title_2?smid=ATVPDKIKX0DER&th=1) — ~$16/card (Amazon)
-- [Canakit 5V 2.5A Micro USB PSU](https://www.canakit.com/raspberry-pi-adapter-power-supply-2-5a.html) — $9.95 (Canakit)
-- 3D-printed enclosure — ~$2 filament
+### Per camera node (v1 — ~$57)
 
-**Mothership:**
-- Any old PC (reuse what you have)
-- Big HDD, wired Gigabit Ethernet
-- Linux + Docker
+| Part | Choice | Notes | Price (USD) | Buy |
+|---|---|---|---|---|
+| Compute | Raspberry Pi Zero 2 W | Built-in 2.4 GHz Wi-Fi, CSI-2, H.264 encode @ 1080p30 | $16.35 | [Canakit](https://www.canakit.com/raspberry-pi-zero-2-w.html?defpid=4783) |
+| Camera | Arducam IMX219 8MP (Pi Camera V2 equivalent) | Ships with 22-22pin Zero 2W ribbon in the box. Upgrade to Camera Module 3 NoIR only on nodes that need night vision. | $12.99 | [Amazon](https://www.amazon.com/gp/product/B09V576TFN/ref=ox_sc_act_title_1?smid=A2IAB2RW3LLT8D&psc=1) |
+| Storage | 32 GB SanDisk Ultra microSDHC (A1, 2-pack) | OS + app only, no footage | ~$16 (= $32 / 2) | [Amazon](https://www.amazon.com/gp/product/B08J4HJ98L/ref=ox_sc_act_title_2?smid=ATVPDKIKX0DER&th=1) |
+| Power | Canakit 5V 2.5A Micro USB supply | Cheap bricks cause instability | $9.95 | [Canakit](https://www.canakit.com/raspberry-pi-adapter-power-supply-2-5a.html) |
+| CSI cable | Zero 22-22pin ribbon | **Included with the Arducam camera above** — don't buy separately | $0 | — |
+| Enclosure | 3D printed, 2-piece, PETG/ASA | ~40–60 g filament per unit | ~$2 (filament) | self-print |
+| Optional | IR LED ring + light sensor | Only for NoIR night-vision units | ~$5 | — |
+| **Per-node total** | | | **~$57 (day)** | |
+
+### Mothership (reuse what you have)
+
+| Part | Choice | Price (USD) |
+|---|---|---|
+| PC | Any old desktop / mini PC you already own | $0 |
+| OS | Linux (Debian / Ubuntu LTS) | $0 |
+| Storage | Surveillance-rated HDD (WD Purple / Seagate Skyhawk), 4–8 TB if buying new | ~$90–$180 (4–8 TB) / $0 if reusing |
+| Network | Wired Gigabit Ethernet to the router (critical — don't put the NVR on Wi-Fi) | $0 |
+| Optional | Google Coral USB TPU (for object detection in Frigate) | ~$60 |
+
+### Network
+
+- 5 GHz capable access point (even though Zero 2 W is 2.4 GHz only, this keeps the 2.4 band less congested for the cameras)
+- Budget ~2–4 Mbps per 1080p camera
+- Put cameras on a dedicated VLAN/SSID if your router supports it
 
 ## Software
 
+### Edge node (per camera)
+
 ```
-Edge node                           Mothership
----------                           ----------
-libcamera / rpicam-vid       -->    Frigate (NVR)
-  |                                   - records streams
-  v                                   - retention policy
-MediaMTX (RTSP server)  -----\        - live dashboard
-                              \       - motion/object detection
-FastAPI control API            ---->  - clip export
-  - /health /snapshot
-  - /reboot /settings
-systemd (auto-restart)
+libcamera / rpicam-vid       -->    RTSP stream
+  |
+  v
+MediaMTX (RTSP server)  ----------> rtsp://<cam-ip>:8554/cam
+                                    (H.264, 1080p30, 2 Mbps)
+FastAPI control API  --------------> http://<cam-ip>:8000
+  - GET  /health          uptime, temp, free disk
+  - GET  /snapshot         grab a JPEG frame
+  - POST /stream/restart   restart mediamtx
+  - POST /reboot           reboot the Pi
+  - POST /settings         update resolution/fps/bitrate
+systemd (auto-restart both services)
 ```
 
-## Why this design
+- **OS:** Raspberry Pi OS Lite (64-bit, Trixie / Debian 13)
+- **RTSP server:** [MediaMTX](https://github.com/bluenviron/mediamtx) — small Go binary, uses the native `rpiCamera` source (hardware H.264, no ffmpeg pipe)
+- **Control API:** FastAPI + uvicorn (small Python service)
+- **Process management:** systemd (one unit per service, `Restart=always`)
 
-- **No storage at the edge** — no HDDs, no per-node DB, nodes stay cheap
-- **Stateless nodes** — flash an SD card, plug in, done
-- **RTSP/H.264** — efficient enough for many cameras on one Wi-Fi AP
-- **Central complexity** — easier to manage, back up, and upgrade
+### Mothership
+
+- **NVR:** [Frigate](https://frigate.video/) in Docker — handles recording, retention, live view, motion/object detection, clip export
+- **Reverse proxy (optional):** Caddy or nginx for HTTPS on your LAN
+- **Monitoring (optional):** Uptime Kuma pinging each node's `/health`
 
 ## Setup
 
@@ -120,8 +150,7 @@ Connect the CSI ribbon cable between the Pi Zero 2 W and the Arducam IMX219.
 
 > **Trixie (Debian 13) note:** If `rpicam-hello` reports "No cameras available" even with
 > `camera_auto_detect=1` in `/boot/firmware/config.txt`, you also need `dtoverlay=imx219`.
-> The setup script (Phase 2) adds this automatically, but if you're debugging before
-> running the script, add it manually and reboot.
+> Add it manually to `config.txt` and reboot.
 
 #### Additional nodes (offline)
 
@@ -129,54 +158,131 @@ Connect the CSI ribbon cable between the Pi Zero 2 W and the Arducam IMX219.
 2. Hit **Write**. No network needed.
 3. Boot the Pi and change the hostname (`sudo hostnamectl set-hostname cam02`, etc.).
 
-### Phase 2 — Single Streaming Camera Node
+### Phase 2 — RTSP Streaming (MediaMTX)
 
-Run the setup script on the Pi (installs MediaMTX, configures RTSP streaming, creates a systemd service):
+#### SSH key setup
+
+From your workstation, copy your SSH public key to the Pi so you don't need passwords:
 
 ```bash
-# Option A — from the Pi itself:
-sudo bash scripts/setup-cam.sh
-
-# Option B — from your workstation over SSH:
-ssh cam01.local 'sudo bash -s' < scripts/setup-cam.sh
+# On the Pi, run:
+mkdir -p ~/.ssh
+cat >> ~/.ssh/authorized_keys
+# Paste your public key (from ~/.ssh/id_ed25519.pub), then Ctrl+D
+chmod 700 ~/.ssh && chmod 600 ~/.ssh/authorized_keys
 ```
 
-The script handles:
-- System update
-- Camera detection + `/boot/firmware/config.txt` fixes (`camera_auto_detect=1`, `dtoverlay=imx219`)
-- Installing ffmpeg + python3
-- Downloading and installing [MediaMTX](https://github.com/bluenviron/mediamtx) v1.17.1
-- Configuring MediaMTX to use the native `rpiCamera` source (hardware H.264, no ffmpeg pipe)
-- Creating and enabling a `mediamtx.service` systemd unit
+Set up passwordless sudo (needed for service management):
 
-Defaults (override with env vars):
-| Setting | Default | Env var |
-|---|---|---|
-| Resolution | 1920×1080 | `STREAM_WIDTH`, `STREAM_HEIGHT` |
-| Frame rate | 15 fps | `STREAM_FPS` |
-| Bitrate | 2.5 Mbps | `STREAM_BITRATE` |
-| RTSP port | 8554 | `RTSP_PORT` |
-| Stream path | `cam` | `STREAM_PATH` |
+```bash
+echo "YOUR_USERNAME ALL=(ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/YOUR_USERNAME
+```
+
+#### Install MediaMTX
+
+```bash
+# Find the latest version
+curl -sI https://github.com/bluenviron/mediamtx/releases/latest 2>&1 | grep -i location
+
+# Download and install (replace version as needed)
+curl -sL https://github.com/bluenviron/mediamtx/releases/download/v1.17.1/mediamtx_v1.17.1_linux_arm64.tar.gz \
+  -o /tmp/mediamtx.tar.gz
+sudo tar xzf /tmp/mediamtx.tar.gz -C /usr/local/bin mediamtx
+```
+
+#### Configure MediaMTX
+
+```bash
+sudo mkdir -p /etc/mediamtx
+sudo tee /etc/mediamtx/mediamtx.yml > /dev/null << 'EOF'
+logLevel: info
+logDestinations: [stdout]
+
+api: yes
+apiAddress: 127.0.0.1:9997
+
+rtsp: yes
+rtspAddress: :8554
+
+paths:
+  cam:
+    source: rpiCamera
+    rpiCameraWidth: 1920
+    rpiCameraHeight: 1080
+    rpiCameraFPS: 30
+    rpiCameraBitrate: 2000000
+    rpiCameraIDRPeriod: 60
+EOF
+```
+
+#### Create systemd service
+
+```bash
+sudo tee /etc/systemd/system/mediamtx.service > /dev/null << 'EOF'
+[Unit]
+Description=MediaMTX RTSP server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/mediamtx /etc/mediamtx/mediamtx.yml
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable mediamtx
+sudo systemctl start mediamtx
+```
 
 Verify from the mothership:
+
 ```bash
-ffplay rtsp://cam01.local:8554/cam
+ffplay rtsp://<cam-ip>:8554/cam
 # or
-vlc rtsp://cam01.local:8554/cam
+vlc rtsp://<cam-ip>:8554/cam
 ```
 
-### Phase 3 — Control API on Each Node
+### Phase 3 — Control API (camctl)
 
-1. Install: `sudo apt install -y python3-pip python3-venv`
-2. Create `/opt/camctl/` with venv, install `fastapi uvicorn`.
-3. Implement endpoints (see `src/camctl/` in this repo when built):
-   - `GET /health` — uptime, temp, free disk
-   - `GET /snapshot` — grab a JPEG via `rpicam-still`
-   - `POST /stream/restart` — `systemctl restart mediamtx`
-   - `POST /reboot`
-   - `POST /settings` — bitrate / resolution / fps (writes config, restarts stream)
-4. Run under systemd on port 8000, bind to LAN only.
-5. Lock down with a shared-secret header or Tailscale/WireGuard if exposed beyond LAN.
+```bash
+sudo apt install -y python3-pip python3-venv ffmpeg
+
+sudo mkdir -p /opt/camctl
+sudo chown $USER:$USER /opt/camctl
+python3 -m venv /opt/camctl/venv
+/opt/camctl/venv/bin/pip install fastapi 'uvicorn[standard]' pyyaml
+```
+
+Copy `edge/camctl/main.py` to `/opt/camctl/main.py`, then create the service:
+
+```bash
+sudo tee /etc/systemd/system/camctl.service > /dev/null << 'EOF'
+[Unit]
+Description=camctl FastAPI control service
+After=mediamtx.service
+Wants=mediamtx.service
+
+[Service]
+ExecStart=/opt/camctl/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
+WorkingDirectory=/opt/camctl
+Restart=always
+RestartSec=5
+User=YOUR_USERNAME
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable camctl
+sudo systemctl start camctl
+```
+
+Verify: `curl http://<cam-ip>:8000/health`
 
 ### Phase 4 — Mothership / Frigate
 
@@ -214,7 +320,6 @@ vlc rtsp://cam01.local:8554/cam
 2. Set predictable hostnames `cam01`..`camNN` + mDNS.
 3. Static DHCP reservations on the router.
 4. Add Uptime Kuma or simple cron script on mothership pinging each `/health`.
-5. Document the flash-and-deploy process in this repo's README.
 
 ### Phase 7 — Production Migration (only when v1 is stable)
 
@@ -223,6 +328,49 @@ vlc rtsp://cam01.local:8554/cam
 3. Carrier adds PoE, eMMC, IR driver.
 4. Keep the software image nearly identical — that's the whole point.
 
+## Bandwidth budget
+
+| Cameras | Resolution | Bitrate each | Total |
+|---|---|---|---|
+| 4 | 1080p @ 15fps | 2.5 Mbps | 10 Mbps |
+| 8 | 1080p @ 15fps | 2.5 Mbps | 20 Mbps |
+| 8 | 720p @ 15fps | 1.5 Mbps | 12 Mbps |
+
+A single cheap Wi-Fi router handles this fine. If you go past ~12 cameras on
+Wi-Fi, move some to Ethernet or PoE.
+
+## Repo layout
+
+```
+security-cam-setup/
+├── docs/
+│   └── images/               photos and screenshots
+├── edge/
+│   ├── camctl/                FastAPI control service
+│   └── systemd/               *.service files
+├── mothership/
+│   ├── docker-compose.yml     Frigate
+│   └── frigate/
+│       └── config.yml
+├── enclosure/
+│   └── *.stl / *.step         3D-print files
+└── scripts/
+    ├── flash-node.sh          provision a fresh SD card
+    └── clone-golden.sh
+```
+
+## What NOT to build (yet)
+
+- Per-camera hard drives
+- Cloud streaming / remote access beyond LAN
+- Mobile app
+- Custom PCB
+- Battery power
+- Audio
+- Face recognition
+- WebRTC (use RTSP first)
+- On-device motion detection (let Frigate do it centrally)
+
 ## Status
 
-Phase 2 complete — single camera node streaming RTSP. See [docs/plan.md](docs/plan.md) for stack details and appendix.
+Phase 3 complete — two camera nodes (cam01, cam02) streaming RTSP with camctl API.
