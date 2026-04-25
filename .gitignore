@@ -2,3 +2,6 @@
 
 # Frigate runtime data (recordings, snapshots, DB)
 mothership/storage/
+
+# Ad-hoc RTSP snapshots
+snapshots/
