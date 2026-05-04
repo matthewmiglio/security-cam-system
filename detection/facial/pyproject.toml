@@ -1,0 +1,25 @@
+[project]
+name = "facial"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Matt Main_PC",email = "matmigg0804@gmail.com"}
+]
+requires-python = ">=3.11"
+dependencies = [
+    "opencv-contrib-python>=4.8.0",
+    "numpy>=1.24.0",
+    "requests>=2.31.0",
+    "tqdm>=4.66.0",
+    "onnxruntime>=1.16.0",
+    "mediapipe>=0.10.0",
+    "insightface>=0.7.3",
+    "retina-face>=0.0.17",
+    "pillow>=10.0.0",
+    "tf-keras>=2.16.0",
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"

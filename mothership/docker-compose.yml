@@ -25,3 +25,30 @@ services:
     environment:
       - FRIGATE_RTSP_PASSWORD=unused   # we don't use auth on local RTSP streams
       - TZ=America/New_York           # adjust to your timezone
+
+    networks:
+      - frigate-net
+
+  face-detector:
+    build: ./face-detector
+    container_name: face-detector
+    restart: unless-stopped
+    depends_on:
+      - frigate
+
+    volumes:
+      - ./storage:/media/frigate    # shared with Frigate — reads snapshots, writes faces/
+
+    environment:
+      - FRIGATE_URL=http://frigate:5000
+      - POLL_INTERVAL=8             # seconds between event polls
+      - MIN_FACE_SCORE=0.6          # YuNet confidence threshold
+      - FACE_PADDING=0.2            # fractional padding around each face crop
+      - TZ=America/New_York
+
+    networks:
+      - frigate-net
+
+networks:
+  frigate-net:
+    driver: bridge

@@ -5,3 +5,10 @@ mothership/storage/
 
 # Ad-hoc RTSP snapshots
 snapshots/
+
+# Facial detection — downloaded images, auto-downloaded models, and local artifacts
+detection/facial/images/
+detection/facial/models/
+detection/facial/labeling_results.json
+detection/facial/benchmark_results.json
+detection/facial/progress.md
