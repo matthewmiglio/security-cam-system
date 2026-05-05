@@ -284,7 +284,7 @@ sudo systemctl start camctl
 
 Verify: `curl http://<cam-ip>:8000/health`
 
-### Phase 4 — Mothership / Frigate
+### Phase 4 — Mothership / Frigate & Face Detection
 
 1. Install Docker Desktop (Windows) or Docker + docker compose (Linux) on the mothership PC.
 2. Configure cameras in [`mothership/frigate/config.yml`](mothership/frigate/config.yml) — point each `path` at `rtsp://camNN.local:8554/cam` and tune retention.
@@ -303,6 +303,59 @@ Verify: `curl http://<cam-ip>:8000/health`
    docker compose down              # stop the stack
    ```
 7. Confirm recording writes to `mothership/storage/recordings/` and retention prunes correctly.
+
+### Phase 4b — Face Detection & Classification
+
+A YuNet sidecar container runs alongside Frigate, sampling each camera's live frame
+every 2 seconds and saving cropped face regions to `mothership/storage/faces/`.
+A separate Python toolkit in `face-detection/` handles labeling and classifier training.
+
+#### How it works
+
+```
+face-detector (Docker sidecar)
+  polls /api/{camera}/latest.jpg every 2s
+    └─ YuNet (OpenCV, 230 KB model, ~13 ms/frame)
+         └─ padded face crops → storage/faces/YYYY-MM-DD/*.jpg + *.json
+```
+
+| ![Face crop example 1](docs/images/face-crop-example-1.jpg) | ![Face crop example 2](docs/images/face-crop-example-2.jpg) | ![Face crop example 3](docs/images/face-crop-example-3.jpg) |
+|---|---|---|
+| Face crop | Face crop | Face crop |
+
+#### Labeling
+
+```bash
+cd face-detection
+poetry run python classify_faces.py
+```
+
+Opens a two-tab Tkinter GUI:
+- **Labels tab** — add person names (matthew, korrah, etc.)
+- **Classify tab** — flip through face crops, assign labels with number keys (1–9), skip with S, undo with Backspace
+
+Results saved to `face-detection/face-labels.json`.
+
+#### Training
+
+```bash
+poetry run python train-face-classifier.py
+```
+
+Extracts 512-d ArcFace embeddings (InsightFace `buffalo_sc`) for every labeled crop,
+trains an RBF SVM on top, and saves the model to `face-detection/models/face-classifier-{N}.pkl`.
+Re-run any time you add more labels — the index auto-increments.
+
+Aim for 20–30 labeled crops per person for reliable accuracy.
+
+#### Config knobs (env vars in `docker-compose.yml`)
+
+| Var | Default | Purpose |
+|---|---|---|
+| `SAMPLE_INTERVAL` | `2` | Seconds between live frame grabs per camera |
+| `SAVE_COOLDOWN` | `3` | Min seconds between saves per camera (prevents duplicate floods) |
+| `MIN_FACE_SCORE` | `0.6` | YuNet confidence threshold |
+| `FACE_PADDING` | `0.2` | Fractional padding added around each face bbox before crop |
 
 ### Phase 5 — Enclosure & Deployment
 
@@ -348,8 +401,14 @@ security-cam-setup/
 ├── edge/
 │   ├── camctl/                FastAPI control service
 │   └── systemd/               *.service files
+├── face-detection/
+│   ├── classify_faces.py      Tkinter labeling GUI
+│   ├── train-face-classifier.py  ArcFace + SVM trainer
+│   ├── models/                trained classifier .pkl files (gitignored)
+│   └── pyproject.toml
 ├── mothership/
-│   ├── docker-compose.yml     Frigate
+│   ├── docker-compose.yml     Frigate + face-detector sidecar
+│   ├── face-detector/         YuNet Docker sidecar
 │   └── frigate/
 │       └── config.yml
 ├── enclosure/
@@ -367,10 +426,9 @@ security-cam-setup/
 - Custom PCB
 - Battery power
 - Audio
-- Face recognition
 - WebRTC (use RTSP first)
 - On-device motion detection (let Frigate do it centrally)
 
 ## Status
 
-Phase 3 complete — two camera nodes (cam01, cam02) streaming RTSP with camctl API.
+Phase 4b in progress — two camera nodes streaming RTSP, Frigate recording, YuNet face detector live, labeling and classifier training working.
