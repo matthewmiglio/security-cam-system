@@ -17,6 +17,7 @@ dependencies = [
     "retina-face>=0.0.17",
     "pillow>=10.0.0",
     "tf-keras>=2.16.0",
+    "scikit-learn>=1.3.0",
 ]
 
 

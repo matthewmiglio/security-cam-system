@@ -41,10 +41,12 @@ services:
 
     environment:
       - FRIGATE_URL=http://frigate:5000
-      - POLL_INTERVAL=8             # seconds between event polls
+      - SAMPLE_INTERVAL=2           # seconds between live frame grabs per camera
+      - SAVE_COOLDOWN=3             # min seconds between face saves per camera
       - MIN_FACE_SCORE=0.6          # YuNet confidence threshold
       - FACE_PADDING=0.2            # fractional padding around each face crop
       - TZ=America/New_York
+      # - CAMERAS=cam01,cam02       # optional: override camera auto-discovery
 
     networks:
       - frigate-net

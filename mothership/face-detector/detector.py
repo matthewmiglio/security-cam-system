@@ -1,19 +1,22 @@
 """
 Face detector sidecar for Frigate NVR.
 
-Polls Frigate's REST API for new person events, runs YuNet on each snapshot,
-crops detected faces, and saves them to disk for later classification.
+Samples each camera's live frame on a fast interval, runs YuNet, and saves
+cropped face images to disk. A per-camera cooldown prevents flooding identical
+frames when someone stands still.
 
 Storage layout:
   /media/frigate/faces/YYYY-MM-DD/
-    {camera}__{event_id}__{timestamp}__face{n}.jpg
-    {camera}__{event_id}__{timestamp}__face{n}.json
+    {camera}__{timestamp}__face{n}.jpg
+    {camera}__{timestamp}__face{n}.json
 
 Config via environment variables:
-  FRIGATE_URL      Base URL for Frigate API  (default: http://frigate:8971)
-  POLL_INTERVAL    Seconds between polls     (default: 8)
-  MIN_FACE_SCORE   YuNet confidence cutoff   (default: 0.6)
-  FACE_PADDING     Fractional bbox padding   (default: 0.2)
+  FRIGATE_URL      Frigate API base URL          (default: http://frigate:5000)
+  CAMERAS          Comma-separated camera names  (default: auto-discover)
+  SAMPLE_INTERVAL  Seconds between frame grabs   (default: 2)
+  SAVE_COOLDOWN    Min seconds between saves per camera (default: 3)
+  MIN_FACE_SCORE   YuNet confidence cutoff        (default: 0.6)
+  FACE_PADDING     Fractional bbox padding        (default: 0.2)
 """
 
 import json
@@ -31,18 +34,19 @@ import numpy as np
 # Config
 # ---------------------------------------------------------------------------
 
-FRIGATE_URL   = os.environ.get("FRIGATE_URL", "http://frigate:8971")
-POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL", "8"))
-MIN_SCORE     = float(os.environ.get("MIN_FACE_SCORE", "0.6"))
-FACE_PADDING  = float(os.environ.get("FACE_PADDING", "0.2"))
+FRIGATE_URL     = os.environ.get("FRIGATE_URL", "http://frigate:5000")
+CAMERAS_ENV     = os.environ.get("CAMERAS", "")
+SAMPLE_INTERVAL = float(os.environ.get("SAMPLE_INTERVAL", "2"))
+SAVE_COOLDOWN   = float(os.environ.get("SAVE_COOLDOWN", "3"))
+MIN_SCORE       = float(os.environ.get("MIN_FACE_SCORE", "0.6"))
+FACE_PADDING    = float(os.environ.get("FACE_PADDING", "0.2"))
 
-FACES_ROOT  = Path("/media/frigate/faces")
-STATE_FILE  = FACES_ROOT / ".state.json"
-MODEL_URL   = (
+FACES_ROOT = Path("/media/frigate/faces")
+MODEL_URL  = (
     "https://github.com/opencv/opencv_zoo/raw/main/models/"
     "face_detection_yunet/face_detection_yunet_2023mar.onnx"
 )
-MODEL_PATH  = Path("/app/models/face_detection_yunet_2023mar.onnx")
+MODEL_PATH = Path("/app/models/face_detection_yunet_2023mar.onnx")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -53,27 +57,7 @@ log = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# State persistence
-# ---------------------------------------------------------------------------
-
-def load_state() -> dict:
-    if STATE_FILE.exists():
-        try:
-            return json.loads(STATE_FILE.read_text())
-        except Exception:
-            pass
-    return {"last_ts": 0, "processed": []}
-
-
-def save_state(state: dict) -> None:
-    FACES_ROOT.mkdir(parents=True, exist_ok=True)
-    # Keep processed list bounded to last 10 000 event IDs
-    state["processed"] = state["processed"][-10_000:]
-    STATE_FILE.write_text(json.dumps(state))
-
-
-# ---------------------------------------------------------------------------
-# YuNet model
+# Model
 # ---------------------------------------------------------------------------
 
 def ensure_model() -> str:
@@ -110,7 +94,7 @@ def detect_faces(detector: cv2.FaceDetectorYN, img: np.ndarray) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# Frigate API helpers
+# Frigate API
 # ---------------------------------------------------------------------------
 
 def frigate_get(path: str, binary: bool = False):
@@ -124,19 +108,18 @@ def frigate_get(path: str, binary: bool = False):
         return None
 
 
-def fetch_events(after: float) -> list[dict]:
-    # Fetch recent person events that have snapshots. No `after` filter —
-    # Frigate's timestamp comparison has edge cases; we use the processed-ID
-    # set to skip already-handled events instead.
-    data = frigate_get("/api/events?label=person&has_snapshot=1&limit=100")
-    if not isinstance(data, list):
-        return []
-    # Only return events newer than our bookmark to avoid re-scanning forever
-    return [e for e in data if e.get("start_time", 0) > after]
+def discover_cameras() -> list[str]:
+    config = frigate_get("/api/config")
+    if isinstance(config, dict) and "cameras" in config:
+        names = list(config["cameras"].keys())
+        log.info("Auto-discovered cameras: %s", names)
+        return names
+    log.warning("Could not auto-discover cameras from /api/config")
+    return []
 
 
-def fetch_snapshot(event_id: str) -> np.ndarray | None:
-    raw = frigate_get(f"/api/events/{event_id}/snapshot.jpg", binary=True)
+def fetch_latest_frame(camera: str) -> np.ndarray | None:
+    raw = frigate_get(f"/api/{camera}/latest.jpg", binary=True)
     if raw is None:
         return None
     arr = np.frombuffer(raw, dtype=np.uint8)
@@ -144,7 +127,7 @@ def fetch_snapshot(event_id: str) -> np.ndarray | None:
 
 
 # ---------------------------------------------------------------------------
-# Face saving
+# Saving
 # ---------------------------------------------------------------------------
 
 def padded_crop(img: np.ndarray, x: int, y: int, w: int, h: int) -> np.ndarray:
@@ -158,36 +141,28 @@ def padded_crop(img: np.ndarray, x: int, y: int, w: int, h: int) -> np.ndarray:
     return img[y1:y2, x1:x2]
 
 
-def save_faces(event: dict, img: np.ndarray, faces: list[dict]) -> int:
-    camera    = event.get("camera", "unknown")
-    event_id  = event["id"]
-    start_ts  = event.get("start_time", time.time())
-    dt        = datetime.fromtimestamp(start_ts, tz=timezone.utc).astimezone()
-    date_str  = dt.strftime("%Y-%m-%d")
-    ts_str    = dt.strftime("%Y%m%dT%H%M%S")
-
-    out_dir = FACES_ROOT / date_str
+def save_faces(camera: str, img: np.ndarray, faces: list[dict]) -> int:
+    now     = time.time()
+    dt      = datetime.fromtimestamp(now, tz=timezone.utc).astimezone()
+    out_dir = FACES_ROOT / dt.strftime("%Y-%m-%d")
     out_dir.mkdir(parents=True, exist_ok=True)
-
-    stem = f"{camera}__{event_id}__{ts_str}"
-    saved = 0
+    ts_str  = dt.strftime("%Y%m%dT%H%M%S_%f")[:-3]  # ms precision
+    stem    = f"{camera}__{ts_str}"
+    saved   = 0
 
     for n, face in enumerate(faces):
         crop = padded_crop(img, face["x"], face["y"], face["w"], face["h"])
         if crop.size == 0:
             continue
-
         jpg_path  = out_dir / f"{stem}__face{n}.jpg"
         json_path = out_dir / f"{stem}__face{n}.json"
-
         cv2.imwrite(str(jpg_path), crop)
         json_path.write_text(json.dumps({
-            "event_id":  event_id,
-            "camera":    camera,
-            "timestamp": dt.isoformat(),
+            "camera":     camera,
+            "timestamp":  dt.isoformat(),
             "face_index": n,
-            "bbox":      face,
-            "image":     jpg_path.name,
+            "bbox":       face,
+            "image":      jpg_path.name,
         }, indent=2))
         saved += 1
 
@@ -199,52 +174,51 @@ def save_faces(event: dict, img: np.ndarray, faces: list[dict]) -> int:
 # ---------------------------------------------------------------------------
 
 def main():
-    log.info("Starting — polling Frigate at %s every %ds", FRIGATE_URL, POLL_INTERVAL)
+    log.info(
+        "Starting — Frigate=%s  sample=%.1fs  cooldown=%.1fs",
+        FRIGATE_URL, SAMPLE_INTERVAL, SAVE_COOLDOWN,
+    )
 
     model_path = ensure_model()
     detector   = build_detector(model_path)
-    state      = load_state()
-    processed  = set(state["processed"])
-    # Default to 1 hour ago on first run — avoids passing epoch 0 which Frigate rejects
-    last_ts    = state["last_ts"] or (time.time() - 3600)
 
-    log.info("Resuming from timestamp %d, %d events already processed", int(last_ts), len(processed))
+    # Resolve camera list
+    if CAMERAS_ENV:
+        cameras = [c.strip() for c in CAMERAS_ENV.split(",") if c.strip()]
+        log.info("Using cameras from env: %s", cameras)
+    else:
+        cameras = []
+        while not cameras:
+            cameras = discover_cameras()
+            if not cameras:
+                log.info("Waiting for Frigate to become ready...")
+                time.sleep(5)
+
+    # Per-camera last-save timestamp for cooldown
+    last_saved: dict[str, float] = {cam: 0.0 for cam in cameras}
+
+    log.info("Sampling %d camera(s) every %.1fs", len(cameras), SAMPLE_INTERVAL)
 
     while True:
-        events = fetch_events(after=last_ts)
-
-        for event in events:
-            event_id = event.get("id")
-            if not event_id or event_id in processed:
-                continue
-
-            img = fetch_snapshot(event_id)
+        for camera in cameras:
+            img = fetch_latest_frame(camera)
             if img is None:
-                log.debug("No snapshot for event %s, skipping", event_id)
-                processed.add(event_id)
                 continue
 
             faces = detect_faces(detector, img)
+            if not faces:
+                continue
 
-            if faces:
-                n_saved = save_faces(event, img, faces)
-                log.info(
-                    "event=%s camera=%s faces=%d saved=%d",
-                    event_id[:8], event.get("camera", "?"), len(faces), n_saved,
-                )
-            else:
-                log.debug("event=%s no faces detected", event_id[:8])
+            now = time.time()
+            if now - last_saved[camera] < SAVE_COOLDOWN:
+                continue  # too soon since last save for this camera
 
-            processed.add(event_id)
-            ts = event.get("start_time", 0)
-            if ts > last_ts:
-                last_ts = ts
+            n_saved = save_faces(camera, img, faces)
+            if n_saved:
+                last_saved[camera] = now
+                log.info("camera=%s faces=%d saved=%d", camera, len(faces), n_saved)
 
-        state["last_ts"]   = last_ts
-        state["processed"] = list(processed)
-        save_state(state)
-
-        time.sleep(POLL_INTERVAL)
+        time.sleep(SAMPLE_INTERVAL)
 
 
 if __name__ == "__main__":
