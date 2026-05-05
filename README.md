@@ -417,18 +417,3 @@ security-cam-setup/
     ├── flash-node.sh          provision a fresh SD card
     └── clone-golden.sh
 ```
-
-## What NOT to build (yet)
-
-- Per-camera hard drives
-- Cloud streaming / remote access beyond LAN
-- Mobile app
-- Custom PCB
-- Battery power
-- Audio
-- WebRTC (use RTSP first)
-- On-device motion detection (let Frigate do it centrally)
-
-## Status
-
-Phase 4b in progress — two camera nodes streaming RTSP, Frigate recording, YuNet face detector live, labeling and classifier training working.
